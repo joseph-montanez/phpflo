@@ -11,7 +11,7 @@ class ArrayPort extends Port
         $this->attachSocket($socket);
     }
 
-    public function detach(SocketInterface $socket)
+    public function detach(InternalSocket $socket)
     {
         $index = array_search($socket, $this->sockets);
         if ($index === false) {

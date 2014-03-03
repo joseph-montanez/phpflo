@@ -27,6 +27,7 @@ class SplitStr extends Component
 
     public function appendString($data)
     {
+		
         $this->string .= $data;
     }
 

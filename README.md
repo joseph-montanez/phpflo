@@ -1,3 +1,7 @@
+## Warning
+
+I am still porting over many from noflo, until then this is a very borken fork.
+
 PhpFlo: Flow-based programming for PHP 5.3+
 ==============================================
 

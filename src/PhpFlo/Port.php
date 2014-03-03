@@ -5,98 +5,281 @@ use Evenement\EventEmitter;
 
 class Port extends EventEmitter
 {
-    private $name = "";
-    private $socket = null;
-    private $from = null;
+	public $description = '';
+	public $required = true;
+	private $type;
+    private $name;
+	private $node;
+	/**
+	 *
+	 * @var InternalSocket[]
+	 */
+	private $sockets;
+    private $from;
 
-    public function __construct($name = '')
+	// constructor: (@type) ->
+    public function __construct($type = null)
     {
-        $this->name = $name;
+		// @type = 'all' unless @type
+        $this->type = $type ?: 'all';
+		// @sockets = []
+		$this->sockets = [];
+		// @from = null
+		$this->from = null;
+		// @node = null
+		$this->node = null;
+		// @name = null
+		$this->name = null;
+		$this->required;
     }
+	
+	// getId: ->
+	public function getId()
+	{
+		//  unless @node and @name
+		if (!isset($this->node) && !isset($this->name)) {
+			// return 'Port'
+			return 'Port';
+		} else {
+			// "#{@node} #{@name.toUpperCase()}"
+			return sprintf('%s %s', $this->node, strtoupper($this->name));
+		}
+	}
+	
+	// getDataType: -> @type
+	public function getDataType()
+	{
+		return $this->type;
+	}
+	
+	// getDescription: -> @description
+	public function getDescription()
+	{
+		return $this->description;
+	}
 
-    public function attach(SocketInterface $socket)
+	// attach: (socket) ->
+	public function attach(SocketInterface $socket)
     {
-        if ($this->socket) {
-            throw new \InvalidArgumentException("{$this->name} socket already attached {$this->socket->getId()}");
-        }
-
-        $this->socket = $socket;
+		// @sockets.push socket
+		$this->sockets []= $socket;
+		// @attachSocket socket
         $this->attachSocket($socket);
     }
 
-    protected function attachSocket(SocketInterface $socket)
+	// attachSocket: (socket, localId = null) ->
+    protected function attachSocket(SocketInterface $socket, $localId = null)
     {
-        $this->emit('attach', array($socket));
+		// @emit "attach", socket
+        $this->emit('attach', [$socket]);
 
+		// @from = socket.from
         $this->from = $socket->from;
-
-        $socket->on('connect', array($this, 'onConnect'));
-        $socket->on('data', array($this, 'onData'));
-        $socket->on('disconnect', array($this, 'onDisconnect'));
+		
+		// socket.setMaxListeners 0 if socket.setMaxListeners
+		if (method_exists($socket, 'setMaxListeners') && is_callable($socket->setMaxListeners)) {
+			$socket->setMaxListeners(0);
+		}
+		
+		// socket.on "connect", =>
+		$socket->on('connect', function () use ($socket, $localId) {
+			// @emit "connect", socket, localId
+			$this->emit('connect', [$socket, $localId]);
+		});
+		
+		// socket.on "begingroup", (group) =>
+		$socket->on('begingroup', function ($group) use ($localId) {
+			// @emit "begingroup", group, localId
+			$this->emit('begingroup', [$group, $localId]);
+		});
+		
+		// socket.on "data", (data) =>
+		$socket->on('data', function ($data) use ($localId) {
+			// @emit "begingroup", group, localId
+			$this->emit('data', [$data, $localId]);
+		});
+		
+		// socket.on "endgroup", (group) =>
+		$socket->on('endgroup', function ($group) use ($localId) {
+			// @emit "begingroup", group, localId
+			$this->emit('endgroup', [$group, $localId]);
+		});
+		
+		// socket.on "disconnect", =>
+		$socket->on('disconnect', function () use ($socket, $localId) {
+			// @emit "disconnect", socket, localId
+			$this->emit('data', [$socket, $localId]);
+		});
     }
-
-    public function detach(SocketInterface $socket)
-    {
-        $this->emit('detach', array($socket));
-        $this->from = null;
-        $this->socket = null;
-    }
-
+	
+	// connect: ->
+	public function connect()
+	{
+		// if @sockets.length is 0
+		if (count($this->sockets) === 0) {
+			// throw new Error "#{@getId()}: No connections available"
+			throw new \RuntimeException(sprintf('%s: No connections available', $this->getId()));
+		}
+		// socket.connect() for socket in @sockets
+		foreach ($this->sockets as $socket) {
+			$socket->connect();
+		}
+	}
+	
+	// beginGroup: (group) ->
+	public function beginGroup ($group) {
+		// if @sockets.length is 0
+		if (count($this->sockets) === 0) {
+			// throw new Error "#{@getId()}: No connections available"
+			throw new \RuntimeException(sprintf('%s: No connections available', $this->getId()));
+		}
+		
+		// @sockets.forEach (socket) ->
+		array_map (function (InternalSocket $socket) use ($group) {
+			// return socket.beginGroup group if socket.isConnected()
+			if ($socket->isConnected()) {
+				return $socket->beginGroup($group);
+			}
+			// socket.once 'connect', ->
+			$socket->once('connect', function () use ($socket, $group) {
+				// socket.beginGroup group
+				$socket->beginGroup($group);
+			});
+			// do socket.connect
+			$socket->connect();
+		}, $this->sockets);
+	}
+	
+	// send: (data) ->
     public function send($data)
     {
-        if (!$this->socket) {
-            throw new \RuntimeException("This port is not connected");
+		// if @sockets.length is 0
+		if (count($this->sockets) === 0) {
+			// throw new Error "#{@getId()}: No connections available"
+			throw new \RuntimeException(sprintf('%s: No connections available', $this->getId()));
         }
-
-        if ($this->isConnected()) {
-            return $this->socket->send($data);
-        }
-
-        $this->socket->once('connect', function(SocketInterface $socket) use ($data) {
-            $socket->send($data);
-        });
-
-        $this->socket->connect();
+		
+		// @sockets.forEach (socket) ->
+		array_map (function (InternalSocket $socket) use ($data) {
+			// return socket.send data if socket.isConnected()
+			if ($socket->isConnected()) {
+				return $socket->send($data);
+			}
+			// socket.once 'connect', ->
+			$socket->once('connect', function () use ($socket, $data) {
+				// socket.send data
+				$socket->send($data);
+			});
+			// do socket.connect
+			$socket->connect();
+		}, $this->sockets);
     }
-
-    public function connect()
-    {
-        if (!$this->socket) {
-            throw new \RuntimeException("No socket available");
+	
+	// endGroup: ->
+	public function endGroup()
+	{
+		// if @sockets.length is 0
+		if (count($this->sockets) === 0) {
+			// throw new Error "#{@getId()}: No connections available"
+			throw new \RuntimeException(sprintf('%s: No connections available', $this->getId()));
         }
-        $this->socket->connect();
-    }
+		
+		// socket.endGroup() for socket in @sockets
+		foreach ($this->sockets as $socket) {
+			$socket->endGroup();
+		}
+	}
 
+	// disconnect: ->
     public function disconnect()
     {
-        if (!$this->socket) {
-            return;
+		// if @sockets.length is 0
+		if (count($this->sockets) === 0) {
+			// throw new Error "#{@getId()}: No connections available"
+			throw new \RuntimeException(sprintf('%s: No connections available', $this->getId()));
         }
-
-        $this->socket->disconnect();
+		
+		// socket.disconnect() for socket in @sockets
+		foreach ($this->sockets as $socket) {
+			$socket->disconnect();
+		}
     }
+	
+	// detach: (socket) ->
+	public function detach (InternalSocket $socket) {
+		// return if @sockets.length is 0
+		if (count($this->sockets) === 0) {
+			return;
+        }
+		
+		// socket = @sockets[0] unless socket
+		if (!$socket) {
+			$socket = $this->sockets[0];
+		}
+		// index = @sockets.indexOf socket
+		$index = array_search($socket, $this->sockets);
+		// return if index is -1
+		if ($index === false) {
+			return;
+		}
+		
+		// @sockets.splice index, 1
+		unset($this->sockets[$index]);
+		$this->sockets = array_values($this->sockets);
+		
+		// @emit "detach", socket
+		$this->emit('detach', [$socket]);
+	}
 
+	// isConnected: ->
     public function isConnected()
     {
+		// connected = false
+		$connected = false;
         if (!$this->socket) {
             return false;
         }
+		
+		// @sockets.forEach (socket) =>
+		array_map (function (InternalSocket $socket) use ($connected) {
+			// if socket.isConnected()
+			if ($socket->isConnected()) {
+				// connected = true
+				$connected = true;
+			}
+		}, $this->sockets);
 
-        return $this->socket->isConnected();
+		// connected
+        return $connected;
     }
-
-    public function onConnect(SocketInterface $socket)
-    {
-        $this->emit('connect', array($socket));
-    }
-
-    public function onData($data)
-    {
-        $this->emit('data', array($data));
-    }
-
-    public function onDisconnect(SocketInterface $socket)
-    {
-        $this->emit('disconnect', array($socket));
-    }
+	
+	// isAddressable: -> false
+	public function isAddressable()
+	{
+		return false;
+	}
+	
+	// isRequired: -> @required
+	public function isRequired()
+	{
+		// isRequired: -> 
+		return $this->required;
+	}
+	
+	// isAttached: ->
+	public function isAttached()
+	{
+		// return if @sockets.length is 0
+		if (count($this->sockets) > 0) {
+			return true;
+        }
+		// false
+		return false;
+	}
+	
+	// canAttach: -> true
+	public function canAttach()
+	{
+		return true;
+	}
 }
