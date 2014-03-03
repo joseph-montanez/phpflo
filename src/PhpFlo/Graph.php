@@ -20,6 +20,8 @@ class Graph extends EventEmitter {
 	public $outports = [];
 	public $groups = [];
 	public $transaction;
+    public $baseDir;
+    public $componentLoader;
 
 // constructor: (@name = '') ->
 	public function __construct($name = '') {
@@ -66,7 +68,7 @@ class Graph extends EventEmitter {
 	}
 
 // endTransaction: (id, metadata) ->
-	public function endTransaction($id, $metadata) {
+	public function endTransaction($id, $metadata = null) {
 // if not @transaction.id
 		if (!isset($this->tranaction['id'])) {
 // throw Error("Nested transactions not supported")
@@ -370,20 +372,32 @@ class Graph extends EventEmitter {
 #
 # Addition of a node will emit the `addNode` event{
 
+	// addNode: (id, component, metadata) ->
 	public function addNode($id, $component, $metadata = null) {
+		// @checkTransactionStart()
 		$this->checkTransactionStart();
 
-		if (!$metadata) {
+		// metadata = {} unless metadata
+		if (!isset($metadata)) {
 			$metadata = [];
 		}
+		// node =
 		$node = [
+			// id: id
 			'id' => $id,
+			// component: component
 			'component' => $component,
-			'metadata' => $metadata];
+			// metadata: metadata
+			'metadata' => $metadata
+		];
+		// @nodes.push node
 		$this->nodes [] = $node;
+		// @emit 'addNode', node
 		$this->emit('addNode', [$node]);
 
+		// @checkTransactionEnd()
 		$this->checkTransactionEnd();
+		// node
 		return $node;
 	}
 
@@ -480,16 +494,20 @@ class Graph extends EventEmitter {
 # Nodes objects can be retrieved from the graph by their ID:
 #
 #     myNode = myGraph->getNod('Read'
-
+	// getNode: (id) ->
 	public function getNode($id) {
+		// for node in @nodes
 		foreach ($this->nodes as $node) {
+			// continue unless node
 			if (!$node) {
 				continue;
 			}
+			// return node if node.id is id
 			if ($node['id'] === $id) {
 				return $node;
 			}
 		}
+		// return null
 		return null;
 	}
 
@@ -542,7 +560,7 @@ class Graph extends EventEmitter {
 			}
 		}
 
-		foreach ($this->groups as $group) {
+		foreach ($this->groups as &$group) {
 			if (!$group) {
 				continue;
 			}
@@ -552,6 +570,7 @@ class Graph extends EventEmitter {
 			}
 			$group->nodes[$index] = $newId;
 		}
+        unset($group);
 		$this->emit('renameNode', [$oldId, $newId]);
 		$this->checkTransactionEnd();
 	}
@@ -665,7 +684,7 @@ class Graph extends EventEmitter {
 			}
 		}
 		$this->edges = $toKeep;
-		foreach ($toRemoves as $edge) {
+		foreach ($toRemove as $edge) {
 			$this->emit('removeEdge', [$edge]);
 		}
 
@@ -795,25 +814,25 @@ class Graph extends EventEmitter {
 		];
 
 		if ($this->name) {
-			$json->properties['name'] = $this->name;
+			$json['properties']['name'] = $this->name;
 		}
 		foreach ($this->properties as $property => $value) {
-			$json->properties[$property] = $value;
+			$json['properties'][$property] = $value;
 		}
 
 		foreach ($this->inports as $pub => $priv) {
-			$json->inports[$pub] = $priv;
+			$json['inports'][$pub] = $priv;
 		}
 		foreach ($this->outports as $pub => $priv) {
-			$json->outports[$pub] = $priv;
+			$json['outports'][$pub] = $priv;
 		}
 
 		# Legacy exported ports
 		foreach ($this->exports as $exported) {
-			if (!$json->exports) {
-				$json->exports = [];
+			if (!$json['exports']) {
+				$json['exports'] = [];
 			}
-			$json->exports [] = $exported;
+			$json['exports'] [] = $exported;
 		}
 
 		foreach ($this->groups as $group) {
@@ -824,15 +843,15 @@ class Graph extends EventEmitter {
 			if ($group->metadata) {
 				$groupData->metadata = $group->metadata;
 			}
-			$json->groups [] = $groupData;
+			$json['groups'] [] = $groupData;
 		}
 
 		foreach ($this->nodes as $node) {
-			$json->processes[$node->id] = [
-				'component' => $node->component
+			$json['processes'][$node['id']] = [
+				'component' => $node['component']
 			];
-			if ($node->metadata) {
-				$json->processes[$node->id]->metadata = $node->metadata;
+			if ($node['metadata']) {
+				$json['processes'][$node['id']]->metadata = $node['metadata'];
 			}
 		}
 
@@ -850,11 +869,11 @@ class Graph extends EventEmitter {
 			if (count($edge->metadata) > 0) {
 				$connection->metadata = $edge->metadata;
 			}
-			$json->connections [] = $connection;
+			$json['connections'] [] = $connection;
 		}
 
 		foreach ($this->initializers as $initializer) {
-			$json->connections [] = [
+			$json['connections'] [] = [
 				'data' => $initializer->from->data,
 				'tgt' => [
 					'process' => $initializer->to->node,
