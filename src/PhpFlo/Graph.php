@@ -858,26 +858,26 @@ class Graph extends EventEmitter {
 		foreach ($this->edges as $edge) {
 			$connection = [
 				'src' => [
-					'process' => $edge->from->node,
-					'port' => $edge->from->port
+					'process' => $edge['from']['node'],
+					'port' => $edge['from']['port']
 				],
 				'tgt' => [
-					'process' => $edge->to->node,
-					'port' => $edge->to->port
+					'process' => $edge['to']['node'],
+					'port' => $edge['to']['port']
 				]
 			];
-			if (count($edge->metadata) > 0) {
-				$connection->metadata = $edge->metadata;
+			if (count($edge['metadata']) > 0) {
+				$connection['metadata'] = $edge['metadata'];
 			}
 			$json['connections'] [] = $connection;
 		}
 
 		foreach ($this->initializers as $initializer) {
 			$json['connections'] [] = [
-				'data' => $initializer->from->data,
+				'data' => $initializer['from']['data'],
 				'tgt' => [
-					'process' => $initializer->to->node,
-					'port' => $initializer->to->port
+					'process' => $initializer['to']['node'],
+					'port' => $initializer['to']['port']
 				]
 			];
 		}
