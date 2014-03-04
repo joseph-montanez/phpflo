@@ -6,7 +6,7 @@ use Evenement\EventEmitter;
 
 class BasePort extends EventEmitter {
 
-	public function __constructor($options = []) {
+	public function __construct($options = []) {
 		$this->options = $options;
 		if (!isset($this->options['datatype'])) {
 			$this->options['datatype'] = 'all';

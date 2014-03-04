@@ -885,4 +885,7 @@ class Graph extends EventEmitter {
 		return json_encode($json, JSON_PRETTY_PRINT);
 	}
 
+    public static function createGraph($name) {
+        return new Graph($name);
+    }
 }

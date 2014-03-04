@@ -1,20 +1,22 @@
 #!/usr/bin/env php
 <?php
+date_default_timezone_set('America/Los_Angeles');
 /**
  * Flow-based example of counting lines of a file, roughly equivalent
  * to "wc -l <filename>"
  */
 
-if (!isset($_SERVER['argv'][1])) {
-    die("You must provide a filename\n");
-}
-$fileName = $_SERVER['argv'][1];
+//if (!isset($_SERVER['argv'][1])) {
+//    die("You must provide a filename\n");
+//}
+//$fileName = $_SERVER['argv'][1];
+$fileName = __DIR__ . DIRECTORY_SEPARATOR . 'count.json';
 
 // Include standard autoloader
 require __DIR__ . '/../../vendor/autoload.php';
 
 // Add nodes to the graph
-$graph = new PhpFlo\Graph("linecount");
+$graph = PhpFlo\Graph::createGraph("linecount");
 $graph->addNode("Read File", "ReadFile");
 $graph->addNode("Split by Lines", "SplitStr");
 $graph->addNode("Count Lines", "Counter");
@@ -32,5 +34,6 @@ $graph->addInitial($fileName, "Read File", "source");
 //echo $graph->toJSON();
 
 // Make the graph "live"
-$network = PhpFlo\Network::create($graph);
+$network = PhpFlo\PhpFlo::createNetwork($graph);
+//$network->start();
 ?>

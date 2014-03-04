@@ -12,7 +12,7 @@ class InPort extends BasePort {
 
 	//put your code here
 
-	public function __constructor($options, $process) {
+	public function __construct($options, $process) {
 		$this->process = null;
 
 		if (!process && is_callable($options)) {
@@ -30,7 +30,7 @@ class InPort extends BasePort {
 			}
 			$this->process = $process;
 		}
-		parent::__constructor($options);
+		parent::__construct($options);
 	}
 
 	public function attachSocket($socket, $localId = null) {

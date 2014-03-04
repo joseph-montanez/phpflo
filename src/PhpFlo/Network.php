@@ -30,10 +30,10 @@ class Network
             $this->loader = new ComponentLoader($this->baseDir);
         }
 
-        $this->graph->on('addNode', array($this, 'addNode'));
-        $this->graph->on('removeNode', array($this, 'removeNode'));
-        $this->graph->on('addEdge', array($this, 'addEdge'));
-        $this->graph->on('removeEdge', array($this, 'removeEdge'));
+//        $this->graph->on('addNode', array($this, 'addNode'));
+//        $this->graph->on('removeNode', array($this, 'removeNode'));
+//        $this->graph->on('addEdge', array($this, 'addEdge'));
+//        $this->graph->on('removeEdge', array($this, 'removeEdge'));
     }
 
     public function uptime()
@@ -118,7 +118,7 @@ class Network
 //
 //          # Inform the ports of the node name
 //          for name, port of process.component.inPorts
-            foreach ($process['component']['inPorts'] as $name => $port) {
+            foreach ($process['component']['inPorts'] as $name => &$port) {
 //            continue if not port or typeof port is 'function' or not port.canAttach
                 if (!$port || is_callable($port) || !$port->canAttach) {
                     continue;
@@ -130,8 +130,9 @@ class Network
 //            port.name = name
                 $port->name = $name;
             }
+            unset($port);
 //          for name, port of process.component.outPorts
-            foreach ($process['component']['outPorts'] as $name => $port) {
+            foreach ($process['component']['outPorts'] as $name => &$port) {
 //          continue if not port or typeof port is 'function' or not port.canAttach
                 if (!$port || is_callable($port) || !$port->canAttach) {
                     continue;
@@ -142,8 +143,8 @@ class Network
                 $port->nodeInstance = $instance;
 //            port.name = name
                 $port->name = $name;
-//
             }
+            unset($port);
 //          @subscribeSubgraph process if instance.isSubgraph()
             if ($instance->isSubgraph()) {
                 $this->subscribeSubgraph($process);
@@ -222,8 +223,220 @@ class Network
 
         return $this->processes[$id];
     }
+	
+	public function connect($done = null) {
+		if ($done === null) {
+			$done = function () {};
+		}
+		
+		// # Wrap the future which will be called when done in a function and return
+		// # it
+		// serialize = (next, add) =>
+		$serialize = function ($next, $add) {
+			// (type) =>
+			return function ($type) use ($next, $add) {
+				// # Add either a Node, an Initial, or an Edge and move on to the next one
+				// # when done
+				// this["add#{type}"] add, ->
+				//-- jm: brain melted...
+				return $this->{'add' . $type}($add, function () use ($next, $type) {
+					// next type
+					return $next($type);
+				});
+			};
+		};
+		//# Subscribe to graph changes when everything else is done
+		//subscribeGraph = =>
+        $subscribeGraph = function () use ($done) {
+		//  @subscribeGraph()
+            $this->subscribeGraph();
+		//  done()
+            call_user_func($done);
+		//
+        };
+		//# Serialize initializers then call callback when done
+		//initializers = _.reduceRight @graph.initializers, serialize, subscribeGraph
+        $array = new \__;
+        $initializers = $array->reduceRight($this->graph->initializers, $serialize, $subscribeGraph);
+		//# Serialize edge creators then call the initializers
+		//edges = _.reduceRight @graph.edges, serialize, -> initializers "Initial"
+        $edges = $array->reduceRight($this->graph->edges, $serialize, function () use ($initializers) {
+            call_user_func_array($initializers, ['Initial']);
+        });
+		//# Serialize node creators then call the edge creators
+		//nodes = _.reduceRight @graph.nodes, serialize, -> edges "Edge"
+        $nodes = $array->reduceRight($this->graph->nodes, $serialize, function () use ($edges) {
+            call_user_func_array($edges, ['Edge']);
+        });
+		//# Start with node creators
+        $nodes('Node');
+		//nodes "Node"
+	}
+	
+	public function connectPort(InternalSocket $socket, $process, $port, $inbound = null) {
+		// if inbound
+		if (isset($inbound)) {
+			// socket.to =
+			$socket->to = [
+				// process: process
+				'process' => $process,
+				// port: port
+				'port' => $port
+			];
+			
+			// unless process.component.inPorts and process.component.inPorts[port]
+			if (!(isset($process['component']['inPorts']) && isset($process['component']['inPorts'][$port]))) {
+				// throw new Error "No inport '#{port}' defined in process #{process.id} (#{socket.getId()})"
+				throw new \RuntimeException(sprintf('No inport \'%s\' defined in process %s (%s)', $port, $process['id'], $socket->getId()));
+				// return
+				return;
+			}
+			//  return process.component.inPorts[port].attach socket
+			return $process['component']['inPorts'][$port].attach($socket);
+		}
+		
+		// socket.from =
+		$socket->from = [
+			// process: process
+			'process' => $process,
+			// port: port
+			'port' => $port
+		];
+			
+		// unless process.component.inPorts and process.component.inPorts[port]
+		if (!(isset($process['component']['outPorts']) && isset($process['component']['outPorts'][$port]))) {
+			// throw new Error "No inport '#{port}' defined in process #{process.id} (#{socket.getId()})"
+			throw new \RuntimeException(sprintf('No outport \'%s\' defined in process %s (%s)', $port, $process['id'], $socket->getId()));
+			// return
+			return;
+		}
+		
+		// process.component.outPorts[port].attach socket
+		return $process['component']['outPorts'][$port].attach($socket);
+	}
 
-    public function getGraph()
+    // subscribeGraph: ->
+    public function subscribeGraph() {
+    //   # A NoFlo graph may change after network initialization.
+    //   # For this, the network subscribes to the change events from
+    //   # the graph.
+    //   #
+    //   # In graph we talk about nodes and edges. Nodes correspond
+    //   # to NoFlo processes, and edges to connections between them.
+    //   graphOps = []
+        $graphOps = [];
+    //   processing = false
+        $processing = false;
+    //   registerOp = (op, details) ->
+        $registerOp = function ($op, $details) use ($graphOps) {
+    //     graphOps.push
+            $graphOps []= [
+    //       op: op
+                'op' => $op,
+    //       details: details
+                'details' => $details
+            ];
+        };
+    //   processOps = =>
+        $processOps = function () use ($processing, $graphOps, $processOps) {
+    //     unless graphOps.length
+            if (!count($graphOps)) {
+    //       processing = false
+                $processing = false;
+    //       return
+                return;
+            }
+    //     processing = true
+            $processing = true;
+    //     op = graphOps.shift()
+            $op = array_shift($graphOps);
+    //     cb = processOps
+            $cb = $processOps;
+    //     switch op.op
+            switch ($op['op']) {
+    //       when 'renameNode'
+                case 'renameNode':
+    //         @renameNode op.details.from, op.details.to, cb
+                    $this->renameNode($op['details']['from'], $op['details']['to'], $cb);
+    //       else
+                default:
+    //         @[op.op] op.details, cb
+                    $this->{$op['op']}($op['details'], $cb);
+            }
+        };
+
+    //   @graph.on 'addNode', (node) =>
+        $this->graph->on('addNode', function ($node) use($registerOp, $processOps, $processing) {
+    //     registerOp 'addNode', node
+            $registerOp('addNode', $node);
+    //     do processOps unless processing
+            if (!$processing) {
+                $processOps();
+            }
+        });
+    //   @graph.on 'removeNode', (node) =>
+        $this->graph->on('removeNode', function ($node) use ($registerOp, $processOps, $processing) {
+    //     registerOp 'removeNode', node
+            $registerOp('removeNode', $node);
+    //     do processOps unless processing
+            if (!$processing) {
+                $processOps();
+            }
+        });
+    //   @graph.on 'renameNode', (oldId, newId) =>
+        $this->graph->on('renameNode', function ($oldId, $newId) use ($registerOp, $processOps, $processing) {
+    //     registerOp 'renameNode',
+            $registerOp('renameNode', [
+    //       from: oldId
+                'from' => $oldId,
+    //       to: newId
+                'to' => $newId
+            ]);
+    //     do processOps unless processing
+            if (!$processing) {
+                $processOps();
+            }
+        });
+
+        //   @graph.on 'addEdge', (edge) =>
+        $this->graph->on('addEdge', function ($edge) use ($registerOp, $processOps, $processing) {
+            //     registerOp 'addEdge', edge
+            $registerOp('addEdge', $edge);
+            //     do processOps unless processing
+            if (!$processing) {
+                $processOps();
+            }
+        });
+        //   @graph.on 'removeEdge', (edge) =>
+        $this->graph->on('removeEdge', function ($edge) use ($registerOp, $processOps, $processing) {
+            //     registerOp 'removeEdge', edge
+            $registerOp('removeEdge', $edge);
+            //     do processOps unless processing
+            if (!$processing) {
+                $processOps();
+            }
+        });
+        //   @graph.on 'addInitial', (iip) =>
+        $this->graph->on('addInitial', function ($iip) use ($registerOp, $processOps, $processing) {
+            //     registerOp 'addInitial', iip
+            $registerOp('addInitial', $iip);
+            //     do processOps unless processing
+            if (!$processing) {
+                $processOps();
+            }
+        });
+        //   @graph.on 'removeInitial', (iip) =>
+        $this->graph->on('removeInitial', function ($iip) use ($registerOp, $processOps, $processing) {
+            //     registerOp 'removeInitial', iip
+            $registerOp('removeInitial', $iip);
+            //     do processOps unless processing
+            if (!$processing) {
+                $processOps();
+            }
+        });
+    }
+
+	public function getGraph()
     {
         return $this->graph;
     }
@@ -341,5 +554,73 @@ class Network
     private function createDateTimeWithMilliseconds()
     {
         return DateTime::createFromFormat('U.u', sprintf('%.6f', microtime(true)));
+    }
+	
+	/**
+	 * 
+	 * @return ComponentLoader
+	 */
+	public function getLoader() {
+		return $this->loader;
+	}
+
+
+    // sendInitial: (initial) ->
+    public function sendInitial($initial) {
+    //   initial.socket.connect()
+        $initial->socket->connect();
+    //   initial.socket.send initial.data
+        $initial->socket->send($initial->data);
+    //   initial.socket.disconnect()
+        $initial->socket->diconnect();
+    }
+
+
+    // sendInitials: ->
+    public function sendInitials() {
+    //   send = =>
+        $send = function () {
+    //     @sendInitial initial for initial in @initials
+            foreach ($this->initials as $initial) {
+                $this->sendInitial($initial);
+            }
+    //     @initials = []
+            $this->initials = [];
+        };
+
+    //   if typeof process isnt 'undefined' and process.execPath and process.execPath.indexOf('node') isnt -1
+    //     # nextTick is faster on Node.js
+    //     process.nextTick send
+    //   else
+    //     setTimeout send, 0
+        //-- TODO support ReactPHP
+        $send();
+    }
+
+
+    // start: ->
+    public function start() {
+    //   @sendInitials()
+        $this->sendInitials();
+    }
+
+    // stop: ->
+    public function stop() {
+    //   # Disconnect all connections
+    //   for connection in @connections
+        foreach ($this->connections as $connection) {
+    //     continue unless connection.isConnected()
+            if (!$connection->isConnected()) {
+                continue;
+            }
+    //     connection.disconnect()
+            $connection->disconnect();
+        }
+    //   # Tell processes to shut down
+    //   for id, process of @processes
+        foreach ($this->processes as $id => $process) {
+    //     process.component.shutdown()
+            $process->component->shutdown();
+        }
     }
 }
