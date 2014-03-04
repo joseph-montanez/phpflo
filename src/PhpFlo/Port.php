@@ -45,6 +45,22 @@ class Port extends EventEmitter
 			return sprintf('%s %s', $this->node, strtoupper($this->name));
 		}
 	}
+
+    public function getNode() {
+        return $this->node;
+    }
+
+    public function setNode($node) {
+        $this->node = $node;
+    }
+
+    public function getName() {
+        return $this->name;
+    }
+
+    public function setName($name) {
+        $this->name = $name;
+    }
 	
 	// getDataType: -> @type
 	public function getDataType()
@@ -278,8 +294,9 @@ class Port extends EventEmitter
 	}
 	
 	// canAttach: -> true
-	public function canAttach()
-	{
-		return true;
-	}
+    public $canAttach = true;
+//	public function canAttach()
+//	{
+//		return true;
+//	}
 }

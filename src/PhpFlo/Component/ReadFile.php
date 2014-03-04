@@ -2,6 +2,8 @@
 namespace PhpFlo\Component;
 
 use PhpFlo\Component;
+use PhpFlo\InPort;
+use PhpFlo\OutPort;
 use PhpFlo\Port;
 
 class ReadFile extends Component

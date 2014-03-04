@@ -67,7 +67,6 @@ class ComponentLoader
     public function load($name, $callback, $delayed, $metadata)
     {
         //   unless @components
-        var_dump('', $this->components);
         if (!isset($this->components)) {
             //     @listComponents (components) =>
             $this->listComponents(function ($components) use ($name, $callback, $delayed, $metadata) {
@@ -79,7 +78,6 @@ class ComponentLoader
         }
         //   component = @components[name]
         $component = isset($this->components[$name]) ? $this->components[$name] : null;
-        var_dump($component);
         //   unless component
         if (!isset($component)) {
             //     # Try an alias
@@ -137,8 +135,10 @@ class ComponentLoader
             $instance = $component->getComponent($metadata);
             //   else
         } else {
-            echo 'TODO';
+            //var_dump($component->getComponent());
+            //echo 'TODO';
             //     implementation = require component
+            $instance = $component;
 
             //     if implementation.getComponent and typeof implementation.getComponent is 'function'
             //       instance = implementation.getComponent metadata
@@ -155,23 +155,82 @@ class ComponentLoader
         $callback($instance);
     }
 
+
+    // isGraph: (cPath) ->
+    public function isGraph($cPath) {
+    //   return true if typeof cPath is 'object' and cPath instanceof nofloGraph.Graph
+        if (is_object($cPath) && $cPath instanceof Graph) {
+            return true;
+        }
+    //   return false unless typeof cPath is 'string'
+        if (!is_string($cPath)) {
+            return false;
+        }
+    //   cPath.indexOf('.fbp') isnt -1 or cPath.indexOf('.json') isnt -1
+        return (strstr($cPath, '.fbp') !== -1) || (strstr($cPath, '.json') !== -1);
+    }
+
+
+    // setIcon: (name, instance) ->
+    public function setIcon($name, $instance) {
+    //   # See if component has an icon
+    //   return if not instance.getIcon or instance.getIcon()
+        if (!$instance->getIcon() || $instance->getIcon()) {
+            return;
+        }
+
+    //   # See if library has an icon
+    //   [library, componentName] = name.split '/'
+        list($library, $componentName) = explode('/', $name);
+    //   if componentName and @getLibraryIcon library
+        if ($componentName && $this->getLibraryIcon($library)) {
+    //     instance.setIcon @getLibraryIcon library
+            $instance->setIcon($this->getLibraryIcon($library));
+    //     return
+            return;
+        }
+
+    //   # See if instance is a subgraph
+    //   if instance.isSubgraph()
+        if ($instance->isSubgraph()) {
+    //     instance.setIcon 'sitemap'
+            $instance->setIcon('sitmap');
+    //     return
+            return;
+        }
+
+    //   instance.setIcon 'square'
+        $instance->setIcon('square');
+    //   return
+        return;
+    }
+
+    // getLibraryIcon: (prefix) ->
+    public function getLibraryIcon($prefix) {
+    //   if @libraryIcons[prefix]
+        if (isset($this->libraryIcons[$prefix])) {
+    //     return @libraryIcons[prefix]
+            return $this->libraryIcons[$prefix];
+        }
+    //   return null
+        return null;
+    }
+
     # getModuleComponents: (moduleName) ->
     public function getModuleComponents($moduleName) {
     #   return unless @checked.indexOf(moduleName) is -1
         if (in_array($moduleName, $this->checked) !== false) {
             return;
         }
-        var_dump('checking ' . $moduleName);
     #   @checked.push moduleName
         $this->checked []= $moduleName;
     #   try
-        $componentJson = sprintf('/%s%scomponent.json', $moduleName, DIRECTORY_SEPARATOR);
+        $componentJson = sprintf('%s%scomponent.json', $moduleName, DIRECTORY_SEPARATOR);
         if (is_file($componentJson)) {
             $data = file_get_contents($componentJson);
             $definition = json_decode($data);
         }
-        if (!isset($definition) || (isset($definition) && $definition === false)) {
-            echo 'nojson ', $moduleName, ' - ', substr($moduleName, 0, 1);
+        else if (!isset($definition) || (isset($definition) && $definition === false)) {
             #     if moduleName.substr(0, 1) is '/'
             if (substr($moduleName, 0, 1) === '/') {
                 #       return @getModuleComponents "noflo-#{moduleName.substr(1)}"
@@ -216,7 +275,6 @@ class ComponentLoader
         }
 
         //-- TODO
-        echo 'STILL RUNNING', PHP_EOL;
     #   if moduleName[0] is '/'
     #     moduleName = moduleName.substr 1
     #   if definition.noflo.loader
@@ -224,10 +282,15 @@ class ComponentLoader
     #     loader = require "/#{moduleName}/#{definition.noflo.loader}"
     #     loader @
     #   if definition.noflo.components
+        if ($definition->noflo->components) {
     #     for name, cPath of definition.noflo.components
+            foreach ($definition->noflo->components as $name => $cPath) {
     #       if cPath.indexOf('.coffee') isnt -1
     #         cPath = cPath.replace '.coffee', '.js'
+                $this->registerComponent($prefix, $name, $moduleName . DIRECTORY_SEPARATOR . $cPath);
     #       @registerComponent prefix, name, "/#{moduleName}/#{cPath}"
+            }
+        }
     #   if definition.noflo.graphs
     #     for name, cPath of definition.noflo.graphs
     #       @registerComponent prefix, name, "/#{moduleName}/#{cPath}"
@@ -243,8 +306,21 @@ class ComponentLoader
         if (!$packageId) {
             $fullName = $name;
         }
+        //-- PHP loader
+        $componentClass = $fullName;
+        if (!class_exists($componentClass) && strpos($componentClass, '\\') === false) {
+            $componentClass = "PhpFlo\\Component\\{$componentClass}";
+            if (!class_exists($componentClass)) {
+                throw new \InvalidArgumentException("Component class {$componentClass} not found");
+            }
+        }
+        $component = new $componentClass();
+        if (!$component instanceof ComponentInterface) {
+            throw new \InvalidArgumentException("Component {$fullName} doesn't appear to be a valid PhpFlo component");
+        }
+
     #   @components[fullName] = cPath
-        $this->components[$fullName] = $cPath;
+        $this->components[$fullName] = new $componentClass();
     #   do callback if callback
         if (is_callable($callback)) {
             call_user_func($callback);

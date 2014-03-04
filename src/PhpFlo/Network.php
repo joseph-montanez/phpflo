@@ -110,39 +110,39 @@ class Network
         }
 
         # Load the component for the process.
-        $this->load($node['component'], $node['metadata'], function ($instance) use ($node, $callback) {
+        $this->load($node['component'], $node['metadata'], function ($instance) use ($process, $node, $callback) {
 //          instance.nodeId = node.id
-            $instance['nodeId'] = $node['id'];
+            $instance->nodeId = $node['id'];
 //          process.component = instance
             $process['component'] = $instance;
 //
 //          # Inform the ports of the node name
 //          for name, port of process.component.inPorts
-            foreach ($process['component']['inPorts'] as $name => &$port) {
+            foreach ($process['component']->inPorts as $name => &$port) {
 //            continue if not port or typeof port is 'function' or not port.canAttach
                 if (!$port || is_callable($port) || !$port->canAttach) {
                     continue;
                 }
 //            port.node = node.id
-                $port->node = $node['id'];
+                $port->setNode($node['id']);
 //            port.nodeInstance = instance
                 $port->nodeInstance = $instance;
 //            port.name = name
-                $port->name = $name;
+                $port->setName($name);
             }
             unset($port);
 //          for name, port of process.component.outPorts
-            foreach ($process['component']['outPorts'] as $name => &$port) {
+            foreach ($process['component']->outPorts as $name => &$port) {
 //          continue if not port or typeof port is 'function' or not port.canAttach
                 if (!$port || is_callable($port) || !$port->canAttach) {
                     continue;
                 }
 //            port.node = node.id
-                $port->node = $node['id'];
+                $port->setNode($node['id']);
 //            port.nodeInstance = instance
                 $port->nodeInstance = $instance;
 //            port.name = name
-                $port->name = $name;
+                $port->setName($name);
             }
             unset($port);
 //          @subscribeSubgraph process if instance.isSubgraph()
@@ -217,6 +217,7 @@ class Network
 
     public function getNode($id)
     {
+        // TODO why are there no processes here?
         if (!isset($this->processes[$id])) {
             return null;
         }
@@ -269,8 +270,10 @@ class Network
             call_user_func_array($edges, ['Edge']);
         });
 		//# Start with node creators
-        $nodes('Node');
-		//nodes "Node"
+        //nodes "Node"
+        if (is_callable($nodes)) {
+            $nodes('Node');
+        }
 	}
 	
 	public function connectPort(InternalSocket $socket, $process, $port, $inbound = null) {
@@ -338,7 +341,8 @@ class Network
             ];
         };
     //   processOps = =>
-        $processOps = function () use ($processing, $graphOps, $processOps) {
+        $processOps = null;
+        $processOps = function () use ($processing, $graphOps, &$processOps) {
     //     unless graphOps.length
             if (!count($graphOps)) {
     //       processing = false
@@ -467,6 +471,22 @@ class Network
         }
 
         return $process['component']->outPorts[$port]->attach($socket);
+    }
+
+
+    // subscribeNode: (node) ->
+    public function subscribeNode($node) {
+    //   return unless node.component.getIcon
+        if (!$node['component']->getIcon()) {
+            return;
+        }
+        //   node.component.on 'icon', =>
+        $node['component']->on('icon', function () use ($node) {
+    //     @emit 'icon',
+            $this->emit('icon', ['id' => $node['id'], 'icon' => $node['component']->getIcon()]);
+    //       id: node.id
+    //       icon: node.component.getIcon()
+        });
     }
 
     public function addEdge(array $edge)

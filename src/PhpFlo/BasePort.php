@@ -5,20 +5,61 @@ namespace PhpFlo;
 use Evenement\EventEmitter;
 
 class BasePort extends EventEmitter {
+    public static $validTypes = [
+        'all',
+        'string',
+        'number',
+        'int',
+        'object',
+        'array',
+        'boolean',
+        'color',
+        'date',
+        'bang'
+    ];
+
+    public $options;
+    public $sockets;
+    public $node;
+    public $name;
+    public $buffer;
 
 	public function __construct($options = []) {
-		$this->options = $options;
-		if (!isset($this->options['datatype'])) {
-			$this->options['datatype'] = 'all';
-		}
-		if (!isset($this->options['required'])) {
-			$this->options['required'] = true;
-		}
+        $this->handleOptions($options);
 
-		$this->sockets = [];
+        $this->sockets = [];
+        $this->buffer = [];
 		$this->node = null;
 		$this->name = null;
 	}
+
+    //+  handleOptions: (options) ->
+    public function handleOptions ($options) {
+    //  +    options = {} unless options
+        $this->options = $options;
+    //  +    options.datatype = 'all' unless options.datatype
+        if (!isset($this->options['datatype'])) {
+            $this->options['datatype'] = 'all';
+        }
+    //  +    options.required = true if options.required is undefined
+        if (!isset($this->options['required'])) {
+            $this->options['required'] = true;
+        }
+    //  +
+    //  +    if validTypes.indexOf(options.datatype) is -1
+        if (in_array($options['datatype'], self::$validTypes) === false) {
+    //  +      throw new Error "Invalid port datatype '#{options.datatype}' specified, valid are #{validTypes.join(' ,')}"
+            throw new \RuntimeException(sprintf('Invalid port datatype \'%s\' specified, valid are %s', $options['datatype'], implode(' ,', self::$validTypes)));
+        }
+    //  +
+    //  +    if options.type and options.type.indexOf('/') is -1
+        if ($options['type'] && strpos($options['type'], '/') === -1) {
+    //  +      throw new Error "Invalid port type '#{options.type}' specified. Should be URL or MIME type"
+    //  +
+        }
+    //  +    @options = options
+        $this->options = $options;
+    }
 
 	public function getId() {
 		if (!$this->node && $this->name) {
@@ -48,7 +89,7 @@ class BasePort extends EventEmitter {
 		$this->emit('attach', array($socket));
 	}
 
-	public function attachSocket() {
+	public function attachSocket($socket, $localId = null) {
 		
 	}
 

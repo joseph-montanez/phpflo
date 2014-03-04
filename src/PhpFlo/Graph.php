@@ -317,6 +317,30 @@ class Graph extends EventEmitter {
 		$this->checkTransactionEnd();
 	}
 
+    // renameGroup: (oldName, newName) ->
+    public function renameGroup($oldName, $newName) {
+    //   @checkTransactionStart()
+        $this->checkTransactionStart();
+    //   for group in @groups
+        foreach ($this->groups as &$group) {
+    //     continue unless group
+            if (!$group) {
+                continue;
+            }
+    //     continue unless group.name is oldName
+            if (!($group['name'] === $oldName)) {
+                continue;
+            }
+    //     group.name = newName
+            $group['name'] = $newName;
+    //     @emit 'renameGroup', oldName, newName
+            $this->emit('renameGroup', $oldName, $newName);
+        }
+        unset($group);
+    //   @checkTransactionEnd()
+        $this->checkTransactionEnd();
+    }
+
 	public function removeGroup($groupName) {
 		$this->checkTransactionStart();
 
