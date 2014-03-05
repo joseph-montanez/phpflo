@@ -278,7 +278,7 @@ class Network
 	
 	public function connectPort(InternalSocket $socket, $process, $port, $inbound = null) {
 		// if inbound
-		if (isset($inbound)) {
+		if ($inbound === true) {
 			// socket.to =
 			$socket->to = [
 				// process: process
@@ -307,7 +307,7 @@ class Network
 		];
 			
 		// unless process.component.inPorts and process.component.inPorts[port]
-		if (!(isset($process['component']['outPorts']) && isset($process['component']['outPorts'][$port]))) {
+		if (!(isset($process['component']->outPorts) && isset($process['component']->outPorts[$port]))) {
 			// throw new Error "No inport '#{port}' defined in process #{process.id} (#{socket.getId()})"
 			throw new \RuntimeException(sprintf('No outport \'%s\' defined in process %s (%s)', $port, $process['id'], $socket->getId()));
 			// return
@@ -315,7 +315,7 @@ class Network
 		}
 		
 		// process.component.outPorts[port].attach socket
-		return $process['component']['outPorts'][$port].attach($socket);
+		return $process['component']->outPorts[$port]->attach($socket);
 	}
 
     // subscribeGraph: ->
@@ -595,7 +595,7 @@ class Network
     //   @connectPort socket, to, edge.to.port, true
         $this->connectPort($socket, $to, $edge['to']['port'], true);
     //   @connectPort socket, from, edge.from.port, false
-        $this->connectPort($socket, $from, $edge['from']['port'], true);
+        $this->connectPort($socket, $from, $edge['from']['port'], false);
 
     //   # Subscribe to events from the socket
     //   @subscribeSocket socket
