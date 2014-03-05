@@ -56,7 +56,7 @@ class InternalSocket extends EventEmitter implements SocketInterface
     {
 		// @connect() unless @connected
 		if (!$this->connected) {
-			return;
+			$this->connect();
 		}
 		// @emit 'data', data
         $this->emit('data', [$data]);
@@ -82,14 +82,14 @@ class InternalSocket extends EventEmitter implements SocketInterface
     public function getId()
     {
 		// fromStr = (from) ->
-		$fromStr = function ($form) {
+		$fromStr = function ($from) {
 			// "#{from.process.id}() #{from.port.toUpperCase()}"
-			return sprintf('%s() %s', $form->process.id, strtoupper($from->port));
+			return sprintf('%s() %s', $from['process']['id'], strtoupper($from['port']));
 		};
 		// toStr = (to) ->
 		$toStr = function ($to) {
 			// "#{to.port.toUpperCase()} #{to.process.id}()"
-			return sprintf('%s %s()', strtoupper($to->port), $to->process->id);
+			return sprintf('%s %s()', strtoupper($to['port']), $to['process']['id']);
 		};
 		
 		// return "UNDEFINED" unless @from or @to

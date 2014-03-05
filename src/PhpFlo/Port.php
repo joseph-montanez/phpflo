@@ -124,7 +124,7 @@ class Port extends EventEmitter
 		// socket.on "disconnect", =>
 		$socket->on('disconnect', function () use ($socket, $localId) {
 			// @emit "disconnect", socket, localId
-			$this->emit('data', [$socket, $localId]);
+			$this->emit('disconnect', [$socket, $localId]);
 		});
     }
 	

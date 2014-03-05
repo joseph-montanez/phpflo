@@ -2,8 +2,9 @@
 namespace PhpFlo;
 
 use DateTime;
+use Evenement\EventEmitter;
 
-class Network
+class Network extends EventEmitter
 {
     private $processes = array();
     private $connections = array();
@@ -71,7 +72,7 @@ class Network
             do ender
             */
             $this->emit('end', [[
-                'start' => $this->startupDatem,
+                'start' => $this->startupDate,
                 'end' => $this->createDateTimeWithMilliseconds(),
                 'uptime' => $this->uptime()
             ]]);
@@ -690,22 +691,55 @@ class Network
         }
     }
 
-    public static function create(Graph $graph)
+//exports.createNetwork = (graph, callback, delay) ->
+    public static function create(Graph $graph, $callback = null, $delay = null)
     {
+//  network = new exports.Network graph
         $network = new Network($graph);
-
-        foreach ($graph->nodes as $node) {
-            $network->addNode($node);
+//  networkReady = (network) ->
+        $networkReady = function (Network $network) use ($callback) {
+//    callback network if callback?
+            if (is_callable($callback)) {
+                callback($network);
+            }
+//    # Send IIPs
+//    network.start()
+            return $network->start();
+        };
+//
+//  # Empty network, no need to connect it up
+//  if graph.nodes.length is 0
+        if (count($graph->nodes) === 0) {
+//    setTimeout ->
+//      networkReady network
+//    , 0
+            //-- TODO: support zero timeout? - ReactPHP
+            $networkReady($network);
+//    return network
+            return $network;
         }
-
-        foreach ($graph->edges as $edge) {
-            $network->addEdge($edge);
-        }
-
-        foreach ($graph->initializers as $initializer) {
-            $network->addInitial($initializer);
-        }
-
+//
+//  # Ensure components are loaded before continuing
+//  network.loader.listComponents ->
+        $network->getLoader()->listComponents(function () use ($delay, $callback, $network, $networkReady) {
+//    # In case of delayed execution we don't wire it up
+//    if delay
+            if (isset($delay)) {
+//      callback network if callback?
+                if (is_callable($callback)) {
+                    $callback($network);
+                }
+//      return
+                return;
+            }
+//    # Wire the network up and start execution
+//    network.connect -> networkReady network
+            return $network->connect(function () use ($network, $networkReady) {
+                return $networkReady($network);
+            });
+        });
+//
+//  network
         return $network;
     }
 
@@ -733,11 +767,11 @@ class Network
     // sendInitial: (initial) ->
     public function sendInitial($initial) {
     //   initial.socket.connect()
-        $initial->socket->connect();
+        $initial['socket']->connect();
     //   initial.socket.send initial.data
-        $initial->socket->send($initial->data);
+        $initial['socket']->send($initial['data']);
     //   initial.socket.disconnect()
-        $initial->socket->diconnect();
+        $initial['socket']->disconnect();
     }
 
 

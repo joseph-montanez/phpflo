@@ -16,7 +16,6 @@ class PhpFlo
             }
 //    # Send IIPs
 //    network.start()
-            var_dump('stat');
             return $network->start();
         };
 //

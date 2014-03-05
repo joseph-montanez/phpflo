@@ -34,6 +34,5 @@ $graph->addInitial($fileName, "Read File", "source");
 //echo $graph->toJSON();
 
 // Make the graph "live"
-$network = PhpFlo\PhpFlo::createNetwork($graph);
-//$network->start();
+$network = PhpFlo\Network::create($graph);
 ?>
