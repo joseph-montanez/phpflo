@@ -89,7 +89,7 @@ class BasePort extends EventEmitter {
 		$this->emit('attach', array($socket));
 	}
 
-	public function attachSocket($socket, $localId = null) {
+	public function attachSocket() {
 		
 	}
 

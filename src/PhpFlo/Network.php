@@ -154,7 +154,7 @@ class Network
 //
 //          # Store and return the process instance
 //          @processes[process.id] = process
-            $this->process[$process['id']] = $process;
+            $this->processes[$process['id']] = $process;
 //          callback process if callback
             if ($callback !== null && is_callable($callback)) {
                 $callback($process);
@@ -252,7 +252,7 @@ class Network
 		//  @subscribeGraph()
             $this->subscribeGraph();
 		//  done()
-            call_user_func($done);
+            $done();
 		//
         };
 		//# Serialize initializers then call callback when done
@@ -262,12 +262,12 @@ class Network
 		//# Serialize edge creators then call the initializers
 		//edges = _.reduceRight @graph.edges, serialize, -> initializers "Initial"
         $edges = $array->reduceRight($this->graph->edges, $serialize, function () use ($initializers) {
-            call_user_func_array($initializers, ['Initial']);
+            $initializers('Initial');
         });
 		//# Serialize node creators then call the edge creators
 		//nodes = _.reduceRight @graph.nodes, serialize, -> edges "Edge"
         $nodes = $array->reduceRight($this->graph->nodes, $serialize, function () use ($edges) {
-            call_user_func_array($edges, ['Edge']);
+            $edges('Edge');
         });
 		//# Start with node creators
         //nodes "Node"
@@ -288,14 +288,14 @@ class Network
 			];
 			
 			// unless process.component.inPorts and process.component.inPorts[port]
-			if (!(isset($process['component']['inPorts']) && isset($process['component']['inPorts'][$port]))) {
+			if (!(isset($process['component']->inPorts) && isset($process['component']->inPorts[$port]))) {
 				// throw new Error "No inport '#{port}' defined in process #{process.id} (#{socket.getId()})"
 				throw new \RuntimeException(sprintf('No inport \'%s\' defined in process %s (%s)', $port, $process['id'], $socket->getId()));
 				// return
 				return;
 			}
 			//  return process.component.inPorts[port].attach socket
-			return $process['component']['inPorts'][$port].attach($socket);
+			return $process['component']->inPorts[$port]->attach($socket);
 		}
 		
 		// socket.from =
@@ -474,6 +474,54 @@ class Network
     }
 
 
+    // # Subscribe to events from all connected sockets and re-emit them
+    // subscribeSocket: (socket) ->
+    public function subscribeSocket(InternalSocket $socket) {
+    //   socket.on 'connect', =>
+        $socket->on('connect', function () use($socket) {
+    //     do @increaseConnections
+            $this->increaseConnections();
+    //     @emit 'connect',
+            $this->emit('connect', ['id' => $socket->getId(), 'socket' => $socket]);
+    //       id: socket.getId()
+    //       socket: socket
+        });
+
+    //   socket.on 'begingroup', (group) =>
+        $socket->on('begingroup', function ($group) use($socket) {
+    //     @emit 'begingroup',
+            $this->emit('begingroup', ['id' => $socket->getId(), 'socket' => $socket, 'group' => $group]);
+    //       id: socket.getId()
+    //       socket: socket
+    //       group: group
+        });
+    //   socket.on 'data', (data) =>
+        $socket->on('data', function ($data) use($socket) {
+    //     @emit 'data',
+            $this->emit('data', ['id' => $socket->getId(), 'socket' => $socket, 'data' => $data]);
+    //       id: socket.getId()
+    //       socket: socket
+    //       data: data
+        });
+    //   socket.on 'endgroup', (group) =>
+        $socket->on('endgroup', function ($group) use($socket) {
+    //     @emit 'endgroup',
+            $this->emit('endgroup', ['id' => $socket->getId(), 'socket' => $socket, 'group' => $group]);
+    //       id: socket.getId()
+    //       socket: socket
+    //       group: group
+        });
+    //   socket.on 'disconnect', =>
+        $socket->on('disconnect', function () use($socket) {
+    //     do @decreaseConnections
+            $this->decreaseConnections();
+    //     @emit 'disconnect',
+            $this->emit('disconnect', ['id' => $socket->getId(), 'socket' => $socket]);
+    //       id: socket.getId()
+    //       socket: socket
+        });
+    }
+
     // subscribeNode: (node) ->
     public function subscribeNode($node) {
     //   return unless node.component.getIcon
@@ -489,27 +537,76 @@ class Network
         });
     }
 
-    public function addEdge(array $edge)
-    {
-        if (!isset($edge['from']['node'])) {
-            return $this->addInitial($edge);
-        }
-        $socket = new InternalSocket();
 
+    // addEdge: (edge, callback) ->
+    public function addEdge($edge, $callback) {
+    //   socket = internalSocket.createSocket()
+        $socket = InternalSocket::createSocket();
+
+    //   from = @getNode edge.from.node
         $from = $this->getNode($edge['from']['node']);
+    //   unless from
         if (!$from) {
-            throw new \InvalidArgumentException("No process defined for outbound node {$edge['from']['node']}");
+    //     throw new Error "No process defined for outbound node #{edge.from.node}"
+            throw new \RuntimeException(sprintf('No process defined for outbound node %s', $edge['from']['node']));
+        }
+    //   unless from.component
+        if (!$from['component']) {
+    //     throw new Error "No component defined for outbound node #{edge.from.node}"
+            throw new \RuntimeException(sprintf('No component defined for outbound node %s', $edge['from']['node']));
+        }
+    //   unless from.component.isReady()
+        if (!$from['component']->isReady()) {
+    //     from.component.once "ready", =>
+            $from['component']->once('ready', function () use ($edge, $callback) {
+    //       @addEdge edge, callback
+                $this->addEdge($edge, $callback);
+            });
+
+    //     return
+            return;
         }
 
+
+        //   to = @getNode edge.to.node
         $to = $this->getNode($edge['to']['node']);
+        //   unless to
         if (!$to) {
-            throw new \InvalidArgumentException("No process defined for inbound node {$edge['to']['node']}");
+            //     throw new Error "No process defined for inbound node #{edge.in.node}"
+            throw new \RuntimeException(sprintf('No process defined for inbound node %s', $edge['to']['node']));
+        }
+        //   unless to.component
+        if (!$to['component']) {
+            //     throw new Error "No component defined for inbound node #{edge.in.node}"
+            throw new \RuntimeException(sprintf('No component defined for inbound node %s', $edge['to']['node']));
+        }
+        //   unless to.component.isReady()
+        if (!$to['component']->isReady()) {
+            //     to.component.once "ready", =>
+            $to['component']->once('ready', function () use ($edge, $callback) {
+                //       @addEdge edge, callback
+                $this->addEdge($edge, $callback);
+            });
+
+            //     return
+            return;
         }
 
-        $this->connectOutgoingPort($socket, $from, $edge['from']['port']);
-        $this->connectInboundPort($socket, $to, $edge['to']['port']);
+    //   @connectPort socket, to, edge.to.port, true
+        $this->connectPort($socket, $to, $edge['to']['port'], true);
+    //   @connectPort socket, from, edge.from.port, false
+        $this->connectPort($socket, $from, $edge['from']['port'], true);
 
-        $this->connections[] = $socket;
+    //   # Subscribe to events from the socket
+    //   @subscribeSocket socket
+        $this->subscribeSocket($socket);
+
+    //   @connections.push socket
+        $this->connections []= $socket;
+    //   callback() if callback
+        if (is_callable($callback)) {
+            $callback();
+        }
     }
 
     public function removeEdge(array $edge)
@@ -529,20 +626,68 @@ class Network
         }
     }
 
-    public function addInitial(array $initializer)
-    {
-        $socket = new InternalSocket();
+//    public function addInitial(array $initializer)
+//    {
+//        var_dump('addInitial', $initializer);
+//        $socket = new InternalSocket();
+//        $to = $this->getNode($initializer['to']['node']);
+//        if (!$to) {
+//            throw new \InvalidArgumentException("No process defined for inbound node {$initializer['to']['node']}");
+//        }
+//
+//        $this->connectInboundPort($socket, $to, $initializer['to']['port']);
+//        $socket->connect();
+//        $socket->send($initializer['from']['data']);
+//        $socket->disconnect();
+//
+//        $this->connections[] = $socket;
+//    }
+
+    // addInitial: (initializer, callback) ->
+    public function addInitial($initializer, $callback) {
+    //   socket = internalSocket.createSocket()
+        $socket = InternalSocket::createSocket();
+
+    //   # Subscribe to events from the socket
+    //   @subscribeSocket socket
+        $this->subscribeSocket($socket);
+
+    //   to = @getNode initializer.to.node
         $to = $this->getNode($initializer['to']['node']);
+    //   unless to
         if (!$to) {
+    //     throw new Error "No process defined for inbound node #{initializer.to.node}"
             throw new \InvalidArgumentException("No process defined for inbound node {$initializer['to']['node']}");
         }
 
-        $this->connectInboundPort($socket, $to, $initializer['to']['port']);
-        $socket->connect();
-        $socket->send($initializer['from']['data']);
-        $socket->disconnect();
+    //   unless to.component.isReady() or to.component.inPorts[initializer.to.port]
+        if (!($to['component']->isReady() || $to['component']->inPorts[$initializer['to']['port']])) {
+    //     to.component.setMaxListeners 0
+            $to['component']->setMaxListeners(0);
+    //     to.component.once "ready", =>
+            $to['component']->once('ready', function () use ($initializer, $callback) {
+    //       @addInitial initializer, callback
+                $this->addInitial($initializer, $callback);
+            });
+    //     return
+            return;
+        }
 
-        $this->connections[] = $socket;
+    //   @connectPort socket, to, initializer.to.port, true
+        $this->connectPort($socket, $to, $initializer['to']['port'], true);
+
+    //   @connections.push socket
+        $this->connections []= $socket;
+
+    //   @initials.push
+        $this->initials []= ['socket' => $socket, 'data' => $initializer['from']['data']];
+    //     socket: socket
+    //     data: initializer.from.data
+
+    //   callback() if callback
+        if (is_callable($callback)) {
+            $callback();
+        }
     }
 
     public static function create(Graph $graph)

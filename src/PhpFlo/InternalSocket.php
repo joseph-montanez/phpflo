@@ -109,4 +109,8 @@ class InternalSocket extends EventEmitter implements SocketInterface
 		// "#{fromStr(@from)} -> #{toStr(@to)}"
 		return sprintf('%s -> %s', $fromStr($this->to), $toStr($this->to));
     }
+
+    public static function createSocket() {
+        return new InternalSocket();
+    }
 }
