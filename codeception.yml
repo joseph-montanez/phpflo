@@ -1,6 +1,7 @@
 actor: Guy
 paths:
     tests: tests
+    log: tests
     data: tests/_data
     helpers: tests/_helpers
 settings:
