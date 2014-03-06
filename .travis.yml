@@ -10,7 +10,7 @@ before_script:
   - php composer.phar install --dev
 
 script:
-  - php codecept run
+  - php vendor/codeception/codeception/codecept run
 
 notifications:
     email:
