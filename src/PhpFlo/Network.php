@@ -743,11 +743,11 @@ class Network extends EventEmitter
         return $network;
     }
 
-    public static function loadFile($file)
+    public static function loadFile($file, $success, $metadata = [])
     {
-        $graph = Graph::loadFile($file);
-
-        return Network::create($graph);
+        Graph::loadFile($file, function ($graph) use ($success) {
+            $success(Network::create($graph));
+        }, $metadata);
     }
 
     private function createDateTimeWithMilliseconds()

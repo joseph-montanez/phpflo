@@ -54,7 +54,7 @@ class Graph extends EventEmitter {
 // startTransaction: (id, metadata) ->
 	public function startTransaction($id, $metadata = null) {
 // if @transaction.id
-		if (isset($this->tranaction['id'])) {
+		if (isset($this->transaction['id'])) {
 // throw Error("Nested transactions not supported")
 			throw new \RuntimeException('Nested transactions not supported');
 		}
@@ -70,7 +70,7 @@ class Graph extends EventEmitter {
 // endTransaction: (id, metadata) ->
 	public function endTransaction($id, $metadata = null) {
 // if not @transaction.id
-		if (!isset($this->tranaction['id'])) {
+		if (!isset($this->transaction['id'])) {
 // throw Error("Nested transactions not supported")
 			throw new \RuntimeException('Attempted to end non-existing transaction');
 		}
@@ -116,7 +116,7 @@ class Graph extends EventEmitter {
 // @checkTransactionStart()
 		$this->checkTransactionStart();
 // before = clone @properties
-		$before = clone $properties;
+		$before = $properties;
 // for item, val of properties
 		foreach ($properties as $item => $val) {
 // @properties[item] = val
@@ -911,5 +911,182 @@ class Graph extends EventEmitter {
 
     public static function createGraph($name) {
         return new Graph($name);
+    }
+
+    public static function loadJSON($definition, $success, $metadata =[]) {
+        //  definition.properties = {} unless definition.properties
+        if (!isset($definition['properties'])) {
+            $definition['properties'] = [];
+        }
+        //  definition.processes = {} unless definition.processes
+        if (!isset($definition['processes'])) {
+            $definition['processes'] = [];
+        }
+        //  definition.connections = [] unless definition.connections
+        if (!isset($definition['connections'])) {
+            $definition['connections'] = [];
+        }
+
+        // graph = new Graph definition.properties.name
+        $graph = new Graph($definition['properties']['name']);
+        //  graph.startTransaction 'loadJSON', metadata
+        $graph->startTransaction('loadJSON', $metadata);
+        //  properties = {}
+        $properties = [];
+        //  for property, value of definition.properties
+        foreach ($definition['properties'] as $property => $value) {
+            // continue if property is 'name'
+            if ($property === 'name') {
+                continue;
+            }
+            // properties[property] = value
+            $properties[$property] = $value;
+        }
+        //  graph.setProperties properties
+        $graph->setProperties($properties);
+
+        //  for id, def of definition.processes
+        foreach ($definition['processes'] as $id => $def) {
+            // def.metadata = {} unless def.metadata
+            if (!isset($def['metadata'])) {
+                $def['metadata'] = [];
+            }
+            // graph.addNode id, def.component, def.metadata
+            $graph->addNode($id, $def['component'], $def['metadata']);
+        }
+
+        //  for conn in definition.connections
+        foreach ($definition['connections'] as $conn) {
+            // if conn.data isnt undefined
+            if (isset($conn['data'])) {
+                // graph.addInitial conn.data, conn.tgt.process, conn.tgt.port.toLowerCase()
+                $graph->addInitial($conn['data'], $conn['tgt']['process'], strtolower($conn['tgt']['port']));
+                // continue
+                continue;
+            }
+            // metadata = if conn.metadata then conn.metadata else {}
+            $metadata = (isset($conn['metadata'])) ? $conn['metadata'] : [];
+            // graph.addEdge conn.src.process, conn.src.port.toLowerCase(), conn.tgt.process, conn.tgt.port.toLowerCase(), metadata
+            $graph->addEdge(
+                $conn['src']['process'], strtolower($conn['src']['port']),
+                $conn['tgt']['process'], strtolower($conn['tgt']['port']),
+                $metadata
+            );
+        }
+
+        //  if definition.exports and definition.exports.length
+        if (isset($definition['exports']) && count($definition['exports']) > 0) {
+            // for exported in definition.exports
+            foreach ($definition['exports'] as $exported) {
+                // if exported.private
+                if (isset($exported['private'])) {
+                    # Translate legacy ports to new
+                    // split = exported.private.split('.')
+                    $split = explode('.', $exported['private']);
+                    // continue unless split.length is 2
+                    if (!(count($split) === 2)) {
+                        continue;
+                    }
+                    // processId = split[0]
+                    $processId = $split[0];
+                    // portId = split[1]
+                    $portId = $split[1];
+
+                    # Get properly cased process id
+                    // for id of definition.processes
+                    foreach ($definition['processes'] as $id => $na) {
+                        // if id.toLowerCase() is processId.toLowerCase()
+                        if (strtolower($id) === strtolower($processId)) {
+                            // processId = id
+                            $processId = $id;
+                        }
+                    }
+                // else
+                } else {
+                    // processId = exported.process
+                    $processId = $exported['process'];
+                    // portId = exported.port
+                    $portId = $exported['port'];
+                }
+                // graph.addExport exported.public, processId, portId, exported.metadata
+                $graph->addExport($exported['public'], $processId, $portId, $exported['metadata']);
+            }
+        }
+
+        //  if definition.inports
+        if (isset($definition['inports'])) {
+            // for pub, priv of definition.inports
+            foreach ($definition['inports'] as $pub => $priv) {
+                // graph.addInport pub, priv.process, priv.port, priv.metadata
+                $graph->addInport($pub, $priv['process'], $priv['port'], $priv['metadata']);
+            }
+        }
+        //  if definition.outports
+        if (isset($definition['outports'])) {
+            // for pub, priv of definition.outports
+            foreach ($definition['outports'] as $pub => $priv) {
+                // graph.addOutport pub, priv.process, priv.port, priv.metadata
+                $graph->addOutport($pub, $priv['process'], $priv['port'], $priv['metadata']);
+            }
+        }
+
+        //  if definition.groups
+        if (isset($definition['outports'])) {
+            // for group in definition.groups
+            foreach ($definition['groups'] as $group) {
+                // graph.addGroup group.name, group.nodes, group.metadata || {}
+                $graph->addGroup($group['name'], $group['nodes'], isset($group['metadata']) ? $group['metadata'] : []);
+            }
+        }
+
+        //  graph.endTransaction 'loadJSON'
+        $graph->endTransaction('loadJSON');
+
+        //  success graph
+        return $success($graph);
+    }
+
+    public static function loadFile($file, $success, $metadata = []) {
+        /* TODO Support fdp files
+         *
+  unless typeof process isnt 'undefined' and process.execPath and process.execPath.indexOf('node') isnt -1
+    try
+      # Graph exposed via Component packaging
+      definition = require file
+      exports.loadJSON definition, success, metadata
+      return
+    catch e
+      # Graph available via HTTP
+      exports.loadHTTP file, (data) ->
+        unless data
+          throw new Error "Failed to load graph #{file}"
+          return
+        if file.split('.').pop() is 'fbp'
+          return exports.loadFBP data, success
+        definition = JSON.parse data
+        exports.loadJSON definition, success
+    return
+  # Node.js graph file
+  require('fs').readFile file, "utf-8", (err, data) ->
+    throw err if err
+
+    if file.split('.').pop() is 'fbp'
+      return exports.loadFBP data, success
+         */
+        if (!is_file($file)) {
+            throw new \RuntimeException(sprintf('%s does not exist', $file));
+        }
+        $data = file_get_contents($file);
+
+        // if file.split('.').pop() is 'fbp'
+        $extension = explode('.', $file);
+        if (end($extension) === 'fbp') {
+            throw new \RuntimeException('fbp files are not yet supported');
+        }
+        // return exports.loadFBP data, success
+        // definition = JSON.parse data
+        $definition = json_decode($data, true);
+        // exports.loadJSON definition, success
+        self::loadJSON($definition, $success);
     }
 }
