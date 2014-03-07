@@ -18,13 +18,17 @@ class ComponentLoader
     public $baseDir;
 
 //constructor: (@baseDir) ->
-    public function __construct($baseDir)
+    public function __construct($baseDir = null)
     {
         $this->components = null;
         $this->checked = [];
         $this->revalidate = false;
         $this->libraryIcons = [];
-        $this->baseDir = __DIR__ . DIRECTORY_SEPARATOR . 'Component';
+        if ($baseDir !== null) {
+            $this->baseDir = $baseDir;
+        } else {
+            $this->baseDir = __DIR__ . DIRECTORY_SEPARATOR . 'Component';
+        }
     }
 //@components = null
 //@checked = []
@@ -61,6 +65,10 @@ class ComponentLoader
 
         //   callback @components
         return $callback($this->components);
+    }
+
+    public function getBaseDir() {
+        return $this->baseDir;
     }
 
     // load: (name, callback, delayed, metadata) ->

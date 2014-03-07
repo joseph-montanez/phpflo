@@ -13,6 +13,9 @@ class Network extends EventEmitter
     private $startupDate = null;
     private $portBuffer = [];
     private $baseDir;
+    /**
+     * @var ComponentLoader
+     */
     private $loader;
     private $connectionCount = 0;
 
@@ -37,6 +40,9 @@ class Network extends EventEmitter
 //        $this->graph->on('removeEdge', array($this, 'removeEdge'));
     }
 
+    /**
+     * @return bool|\DateInterval
+     */
     public function uptime()
     {
         return $this->startupDate->diff($this->createDateTimeWithMilliseconds());
@@ -276,6 +282,22 @@ class Network extends EventEmitter
             $nodes('Node');
         }
 	}
+
+    public function getProcesses() {
+        return $this->processes;
+    }
+
+    public function getConnections() {
+        return $this->connections;
+    }
+
+    public function getInitials() {
+        return $this->initials;
+    }
+
+    public function getBaseDir() {
+        return $this->baseDir;
+    }
 	
 	public function connectPort(InternalSocket $socket, $process, $port, $inbound = null) {
 		// if inbound

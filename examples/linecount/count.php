@@ -6,11 +6,10 @@ date_default_timezone_set('America/Los_Angeles');
  * to "wc -l <filename>"
  */
 
-//if (!isset($_SERVER['argv'][1])) {
-//    die("You must provide a filename\n");
-//}
-//$fileName = $_SERVER['argv'][1];
-$fileName = __DIR__ . DIRECTORY_SEPARATOR . 'count.json';
+if (!isset($_SERVER['argv'][1])) {
+    die("You must provide a filename\n");
+}
+$fileName = $_SERVER['argv'][1];
 
 // Include standard autoloader
 require __DIR__ . '/../../vendor/autoload.php';

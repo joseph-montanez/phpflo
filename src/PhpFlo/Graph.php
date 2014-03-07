@@ -128,6 +128,14 @@ class Graph extends EventEmitter {
 		$this->checkTransactionEnd();
 	}
 
+    public function getLoader() {
+        return $this->loader;
+    }
+
+    public function getBaseDir() {
+        return $this->baseDir;
+    }
+
 // addExport: (publicPort, nodeKey, portKey, metadata = {x:0,y:0}) ->
 	public function addExport($publicPort, $nodeKey, $portKey, $metadata = ['x' => 0, 'y' => 0]) {
 // return unless @getNode nodeKey
