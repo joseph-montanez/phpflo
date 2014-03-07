@@ -1,0 +1,14 @@
+{
+    "name": "noflo",
+    "description": "Flow-Based Programming environment for JavaScript",
+    "dependencies": [],
+    "noflo": {
+        "components": {
+            "Counter": "src/PhpFlo/Component/Counter.php",
+            "Output": "src/PhpFlo/Component/Output.php",
+            "ReadFile": "src/PhpFlo/Component/ReadFile.php",
+            "SplitStr": "src/PhpFlo/Component/SplitStr.php"
+        },
+        "icon": ""
+    }
+}
